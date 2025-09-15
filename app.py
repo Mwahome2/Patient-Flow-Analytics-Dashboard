@@ -54,8 +54,8 @@ def main():
     df.dropna(subset=['Event date', 'M&MCCoD_Alive_Date of Discharge'], inplace=True)
     
     # Calculate length of stay, handling potential negative values
-    df['length_of_stay_days'] = (df['M&MCCoD_Alive_Date of Discharge'] - df['Event date']).dt.total_seconds() / (24 * 3600)
-    df.loc[df['length_of_stay_days'] < 0, 'length_of_stay_days'] = np.nan
+    df['length_of_stay_days'] = (df['Event date'] - df['M&MCCoD_Alive_Date of Discharge']).dt.total_seconds() / (24 * 3600)
+   df['length_of_stay_days']
     
     # Create the 'Month' column
     df['Month'] = df['Event date'].dt.to_period('M').astype(str)
