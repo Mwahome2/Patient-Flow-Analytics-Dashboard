@@ -37,7 +37,6 @@ def main():
         return
 
     try:
-        # Assuming the file has no specific sheet name, we'll use the default.
         df = pd.read_excel(file_path)
         st.success("Data loaded successfully!")
     except Exception as e:
@@ -46,35 +45,34 @@ def main():
 
     # --- Data Processing and Cleaning ---
     df['Age Group'] = df['M&MCCoD Age'].apply(get_age_group)
-    
-    # Convert dates to datetime, removing timezone information to avoid warnings
+
+    # Convert dates
     df['Event date'] = pd.to_datetime(df['Event date'], errors='coerce').dt.tz_localize(None)
     df['M&MCCoD_Alive_Date of Discharge'] = pd.to_datetime(df['M&MCCoD_Alive_Date of Discharge'], errors='coerce').dt.tz_localize(None)
-    
     df.dropna(subset=['Event date', 'M&MCCoD_Alive_Date of Discharge'], inplace=True)
-    
-    # Calculate length of stay, handling potential negative values
-    df['length_of_stay_days'] = (df['Event date'] - df['M&MCCoD_Alive_Date of Discharge']).dt.total_seconds() / (24 * 3600)
-    df['length_of_stay_days']
-    
-    # Create the 'Month' column
+
+    # Length of stay
+    df['length_of_stay_days'] = (
+        (df['Event date'] - df['M&MCCoD_Alive_Date of Discharge']).dt.total_seconds() / (24 * 3600)
+    )
+
+    # Month column
     df['Month'] = df['Event date'].dt.to_period('M').astype(str)
-    
-    # Clean up string columns for consistent filtering
+
+    # Clean string columns
     df['M&MCCoD_Alive_Primary diagnosis'] = df['M&MCCoD_Alive_Primary diagnosis'].astype(str).str.strip()
     df['Organisation unit name'] = df['Organisation unit name'].astype(str).str.strip()
     df['Age Group'] = df['Age Group'].astype(str).str.strip()
     df['Month'] = df['Month'].astype(str).str.strip()
-    
+
     # --- Sidebar Filters ---
     st.sidebar.header("Filter Options")
-    
-    # Add 'All' option to each unique list for the selectors
+
     months = ['All'] + sorted(df['Month'].unique().tolist())
     diagnoses = ['All Diagnoses'] + sorted(df['M&MCCoD_Alive_Primary diagnosis'].unique().tolist())
     age_groups = ['All Age Groups'] + sorted(df['Age Group'].unique().tolist())
     org_units = ['All Units'] + sorted(df['Organisation unit name'].unique().tolist())
-    
+
     selected_month = st.sidebar.selectbox("Select Month", months)
     selected_diagnosis = st.sidebar.selectbox("Select Diagnosis", diagnoses)
     selected_age_group = st.sidebar.selectbox("Select Age Group", age_groups)
@@ -85,35 +83,55 @@ def main():
 
     if selected_month != 'All':
         filtered_patients = filtered_patients[filtered_patients['Month'] == selected_month]
-    
+
     if selected_diagnosis != 'All Diagnoses':
         filtered_patients = filtered_patients[filtered_patients['M&MCCoD_Alive_Primary diagnosis'] == selected_diagnosis]
 
     if selected_age_group != 'All Age Groups':
         filtered_patients = filtered_patients[filtered_patients['Age Group'] == selected_age_group]
-        
+
     if selected_organisation_unit != 'All Units':
         filtered_patients = filtered_patients[filtered_patients['Organisation unit name'] == selected_organisation_unit]
 
     # --- Display Filtered Patient Details ---
     st.subheader("Filtered Patient Details")
     if not filtered_patients.empty:
-        patient_details = filtered_patients[['M&MCCoD Sex', 'M&MCCoD Age', 'Age Group',
-                                             'M&MCCoD_Alive_Primary diagnosis', 'Organisation unit name',
-                                             'length_of_stay_days']].copy()
+        patient_details = filtered_patients[[
+            'M&MCCoD Sex',
+            'M&MCCoD Age',
+            'Age Group',
+            'M&MCCoD_Alive_Primary diagnosis',
+            'Organisation unit name',
+            'length_of_stay_days'
+        ]].copy()
         patient_details.index = np.arange(1, len(patient_details) + 1)
         st.dataframe(patient_details, use_container_width=True)
     else:
         st.warning("No patients found for the selected criteria.")
 
-    # --- Display Charts (unfiltered) ---
+    # --- Charts based on filtered data ---
     st.subheader("Patient Volume by Month")
-    patient_volume_by_month = df.groupby('Month').size().reset_index(name='cases')
-    st.bar_chart(patient_volume_by_month.set_index('Month'))
-    
+    patient_volume_by_month = filtered_patients.groupby('Month').size().reset_index(name='cases')
+    if not patient_volume_by_month.empty:
+        st.bar_chart(patient_volume_by_month.set_index('Month'))
+    else:
+        st.info("No data available for the selected filters to plot Patient Volume by Month.")
+
     st.subheader("Average Length of Stay by Diagnosis")
-    avg_los_by_diagnosis = df.groupby('M&MCCoD_Alive_Primary diagnosis')['length_of_stay_days'].mean().sort_values(ascending=False).head(10)
-    st.bar_chart(avg_los_by_diagnosis)
+    if not filtered_patients.empty:
+        avg_los_by_diagnosis = (
+            filtered_patients
+            .groupby('M&MCCoD_Alive_Primary diagnosis')['length_of_stay_days']
+            .mean()
+            .sort_values(ascending=False)
+            .head(10)
+        )
+        if not avg_los_by_diagnosis.empty:
+            st.bar_chart(avg_los_by_diagnosis)
+        else:
+            st.info("No data available for the selected filters to plot Average Length of Stay.")
+    else:
+        st.warning("No patients found for the selected criteria.")
 
 # --- Run main function ---
 if __name__ == "__main__":
